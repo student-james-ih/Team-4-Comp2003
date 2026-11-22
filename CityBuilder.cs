@@ -1,4 +1,5 @@
 using UnityEngine;
+using System.Threading.Tasks;
 
 namespace CityGen
 {
@@ -11,9 +12,13 @@ namespace CityGen
 
         [SerializeField] private CitySettings settings;
 
-        void Start()
+        async void Start()
         {
-            var blueprint = BlueprintGenerator.Generate(settings);
+            CityMap blueprint = null;
+            await Task.Run(() =>
+            {
+                blueprint = BlueprintGenerator.Generate(settings);
+            });
             gen.Consume(blueprint);
         }
     }

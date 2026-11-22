@@ -10,40 +10,108 @@ namespace CityGen
     public class City3DGen : MonoBehaviour
     {
         [SerializeField] private Material buildingMaterial;
+        [SerializeField] private Material streetMaterial;
 
         public void Consume(CityMap map, Vector3? point = null)
         {
             Vector3 offset = point ?? Vector3.zero;
             offset -= new Vector3(map.Width / 2, 0, map.Height / 2);
 
+            // BUILDINGS
+
+            GenerateBuildings(map, offset);
+
+            // STREETS
+
+            var streetVerts = new List<Vector3>(); // may be abstracted later
+            var streetTris = new List<int>();
+
+            foreach (var street in map.Streets)
+            {
+                var frame = map.Sectors[street.Sector].Frame;
+
+                MeshStreet(street, offset, streetVerts, streetTris);
+            }
+
+            var streetsMesh = new Mesh();
+            streetsMesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
+
+            streetsMesh.SetVertices(streetVerts);
+            streetsMesh.SetTriangles(streetTris, 0);
+            streetsMesh.RecalculateNormals();
+            streetsMesh.RecalculateBounds();
+
+            var streetsObj = new GameObject("streets");
+            var streetsMeshRenderer = streetsObj.AddComponent<MeshRenderer>();
+            var streetsMeshFilter = streetsObj.AddComponent<MeshFilter>();
+
+            streetsMeshRenderer.sharedMaterial = streetMaterial;
+            streetsMeshFilter.sharedMesh = streetsMesh;
+        }
+
+        private void GenerateBuildings(CityMap map, Vector3 offset)
+        {
             var verts = new List<Vector3>(); // may be abstracted later
             var tris = new List<int>();
 
-            // BUILDINGS
-
             foreach (var b in map.Buildings)
             {
-                var frame = map.Sectors.Where(s => s.Id == b.Sector).FirstOrDefault().Frame;
+                var frame = map.Sectors[b.Sector].Frame;
 
                 MeshBuilding(b, frame, offset, verts, tris);
             }
 
-            var buildingsMesh = new Mesh();
-            buildingsMesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
+            var mesh = new Mesh();
+            mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
 
-            buildingsMesh.SetVertices(verts);
-            buildingsMesh.SetTriangles(tris, 0);
-            buildingsMesh.RecalculateNormals();
-            buildingsMesh.RecalculateBounds();
+            mesh.SetVertices(verts);
+            mesh.SetTriangles(tris, 0);
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
 
             var obj = new GameObject("buildings");
             var meshRenderer = obj.AddComponent<MeshRenderer>();
             var meshFilter = obj.AddComponent<MeshFilter>();
 
             meshRenderer.sharedMaterial = buildingMaterial;
-            meshFilter.sharedMesh = buildingsMesh;
+            meshFilter.sharedMesh = mesh;
         }
 
+        private void MeshStreet(
+            StreetPiece road, Vector3 offset, 
+            List<Vector3> verts, List<int> tris)
+        {
+
+            void Fill(List<Vector3> p)
+            {
+                var whitelist = new List<int>();
+                    for (int i = 0; i < p.Count; i++)
+                        whitelist.Add(i);
+
+                while (true)
+                {
+                    for (int i = 0; i < whitelist.Count; i++)
+                    {
+                        if (i + 2 < whitelist.Count)
+                        {
+                            MeshTri(p[whitelist[i]], p[whitelist[i + 1]], p[whitelist[i + 2]], Vector3.up, verts, tris);
+                            whitelist.RemoveAt(i + 1);
+                        }
+                        else if (i + 1 < whitelist.Count)
+                        {
+                            MeshTri(p[whitelist[0]], p[whitelist[i]], p[whitelist[i + 1]], Vector3.up, verts, tris);
+                            whitelist.RemoveAt(i + 1);
+                        }
+                        else
+                            break;
+                    }
+                    if (whitelist.Count <= 2)
+                        break;
+                }
+            }
+
+            Fill(road.Outline.Select(point => V3(point) + offset).ToList());
+        }
 
         private void MeshBuilding(
             Building building, Frame frame, Vector3 offset, 
@@ -116,7 +184,7 @@ namespace CityGen
                 (d, b) = (b, d); // 'flip winding'
             }
 
-            int i = verts.Count; // setting indes to end of verts instead of 0 as it may already contain data later
+            int i = verts.Count; // setting indes to end of verts instead of 0 as it may already contain data
 
             verts.Add(a);
             verts.Add(b);
@@ -130,6 +198,26 @@ namespace CityGen
             tris.Add(i); // tri 2 (verts 1, 3, 4)
             tris.Add(i + 2);
             tris.Add(i + 3);
+        }
+
+        private void MeshTri(
+            Vector3 a, Vector3 b, Vector3 c, Vector3 normal,
+            List<Vector3> verts, List<int> tris)
+        {
+            if (Vector3.Dot(Vector3.Cross(b - a, c - a), normal) < 0f)
+            {
+                (a, b) = (b, a); // 'flip winding'
+            }
+
+            int i = verts.Count; // setting indes to end of verts instead of 0 as it may already contain data
+
+            verts.Add(a);
+            verts.Add(b);
+            verts.Add(c);
+
+            tris.Add(i);
+            tris.Add(i + 1);
+            tris.Add(i + 2);
         }
 
 

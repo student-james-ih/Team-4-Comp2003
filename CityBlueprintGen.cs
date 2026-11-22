@@ -451,7 +451,8 @@ namespace CityGen
         public readonly List<SignificantRoad> SignificantRoads = new();
         public readonly List<StreetPiece> Streets = new();         // exact sector streets
         public readonly List<SurfacePatch> Surfaces = new();       // exact sector ground surfaces
-        public readonly List<Sector> Sectors = new();
+        //public readonly List<Sector> Sectors = new();
+        public readonly Dictionary<int, Sector> Sectors = new();
         public readonly List<(int Sector, Rect Block, District District)> SectorBlocks = new();
 
         // Smooth random fields (0-1) used for heights and district layout
@@ -812,7 +813,7 @@ namespace CityGen
                     Key = key,
                     Angle = PickSectorAngle(s, rng, nearRoads[key].Select(i => boundaries[i]).ToList())
                 };
-                world.Sectors.Add(sector);
+                world.Sectors.Add(sector.Id, sector);
                 sectorByKey[key] = sector;
             }
 
@@ -823,8 +824,8 @@ namespace CityGen
             var minV = Enumerable.Repeat(double.MaxValue, count).ToArray();
             var maxU = Enumerable.Repeat(double.MinValue, count).ToArray();
             var maxV = Enumerable.Repeat(double.MinValue, count).ToArray();
-            var cosA = world.Sectors.Select(sc => Math.Cos(sc.Angle * Math.PI / 180)).ToArray();
-            var sinA = world.Sectors.Select(sc => Math.Sin(sc.Angle * Math.PI / 180)).ToArray();
+            var cosA = world.Sectors.Values.Select(sc => Math.Cos(sc.Angle * Math.PI / 180)).ToArray();
+            var sinA = world.Sectors.Values.Select(sc => Math.Sin(sc.Angle * Math.PI / 180)).ToArray();
 
             for (int x = 0; x < width; x++)
                 for (int y = 0; y < height; y++)
@@ -841,7 +842,7 @@ namespace CityGen
             // Margin round the sector: room for edge blocks, the roads round them
             // and stubs, and so blocks touching the grid's edge are never ones we need
             int pad = 2 * s.MaxBlockSizeEdge + 2 * Math.Max(s.MajorRoadWidth, s.MainRoadWidth) + s.StubLength + 2;
-            foreach (Sector sector in world.Sectors)
+            foreach (Sector sector in world.Sectors.Values)
             {
                 int id = sector.Id;
                 var (ox, oy) = new Frame(0, 0, sector.Angle).ToWorld(minU[id] - pad, minV[id] - pad);
@@ -851,8 +852,9 @@ namespace CityGen
             }
 
             // 5. Lay each sector out on its own grid
+
             var locals = new List<CityMap>();
-            foreach (Sector sector in world.Sectors)
+            foreach (Sector sector in world.Sectors.Values)
                 locals.Add(GenerateSector(world, s, rng, sector, boundaries));
 
             // 6. Copy every sector onto the map in a single pass
@@ -875,6 +877,19 @@ namespace CityGen
                     }
 
             return world;
+        }
+
+        // Deterministically create a "random" new seed based on baseSeed and an index
+        static int DeriveSeed(int baseSeed, int index)
+        {
+            unchecked // prevents errors from purposefully overflowing ulong
+            {
+                ulong z = (ulong)baseSeed * 0x9E3779B97F4A7C15UL + (ulong)index;
+                z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9UL;
+                z = (z ^ (z >> 27)) * 0x94D049BB133111EBUL;
+                z ^= z >> 31;
+                return (int)z;
+            }
         }
 
         static List<BoundaryRoad> LayOutBoundaryRoads(CityMap world, CitySettings s, Random rng)
@@ -1088,6 +1103,7 @@ namespace CityGen
         // on a grid turned to the sector's angle. Only blocks lying wholly inside
         // the sector, clear of the boundary roads and their pavements, are used,
         // so nothing is ever cut by a boundary road.
+        // NOTE: -- This method cannot write to world, s or boundaries or a race condition will appear
         static CityMap GenerateSector(CityMap world, CitySettings s, Random rng, Sector sector, List<BoundaryRoad> boundaries)
         {
             var map = new CityMap(sector.LocalWidth, sector.LocalHeight, world.Seed, world.Shape)
@@ -1329,7 +1345,7 @@ namespace CityGen
                 }
 
             // Then each sector's stubs, areas, districts and exact geometry
-            foreach (Sector sector in world.Sectors)
+            foreach (Sector sector in world.Sectors.Values)
                 CopySectorExtras(world, sector, locals[sector.Id], boundaries);
         }
 
