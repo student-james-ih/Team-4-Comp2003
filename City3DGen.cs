@@ -51,6 +51,41 @@ namespace CityGen
 
         private void GenerateBuildings(CityMap map, Vector3 offset)
         {
+            foreach (var b in map.Buildings)
+            {
+                var frame = map.Sectors[b.Sector].Frame;
+
+                var pos = V3(frame.ToWorld(b.Lot.CentreX, b.Lot.CentreY)) + offset;
+
+                var chunks = CityLODManager.Instance.BuildingChunks;
+
+                int gridX = Mathf.FloorToInt(pos.x / chunks.GridSize) * chunks.GridSize;
+                int gridZ = Mathf.FloorToInt(pos.z / chunks.GridSize) * chunks.GridSize;
+
+                Chunk chunk = chunks.Get(gridX, gridZ);
+
+                MeshBuilding(b, frame, offset, chunk.Verts, chunk.Tris);
+            }
+
+            foreach (var c in CityLODManager.Instance.BuildingChunks.Chunks.Values)
+            {
+                var mesh = new Mesh();
+
+                mesh.SetVertices(c.Verts);
+                mesh.SetTriangles(c.Tris, 0);
+                mesh.RecalculateNormals();
+                mesh.RecalculateBounds();
+
+                var obj = new GameObject($"chunk");
+                var meshRenderer = obj.AddComponent<MeshRenderer>();
+                var meshFilter = obj.AddComponent<MeshFilter>();
+
+                meshRenderer.sharedMaterial = buildingMaterial;
+                meshFilter.sharedMesh = mesh;
+            }
+
+
+            /*
             var verts = new List<Vector3>(); // may be abstracted later
             var tris = new List<int>();
 
@@ -75,6 +110,7 @@ namespace CityGen
 
             meshRenderer.sharedMaterial = buildingMaterial;
             meshFilter.sharedMesh = mesh;
+            */
         }
 
         private void MeshStreet(
