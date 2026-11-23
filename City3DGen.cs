@@ -32,17 +32,13 @@ namespace CityGen
             City3DGen.terrain = terrain;
             City3DGen.heightMap = heightMap;
 
-            // BUILDINGS
-
             GenerateBuildings(map, tileSize);
 
-            // STREETS
-
-            var streetChunks = LOD.StreetChunks;
             streetVertLookup.Clear();
 
-            foreach (var street in map.Streets)
-                MeshStreet(street, streetChunks);
+            GenerateStreets(map);
+
+            GenerateSignificantRoads(map);
 
             LOD.StreetChunks.Build(streetMaterial);
         }
@@ -130,7 +126,56 @@ namespace CityGen
 
         #endregion
 
+        private void GenerateSignificantRoads(CityMap map)
+        {
+            var streetChunks = LOD.StreetChunks;
+
+            foreach (var road in map.SignificantRoads)
+                MeshSignificantRoad(road, streetChunks);
+        }
+
+        private void MeshSignificantRoad(SignificantRoad road, ChunkGrid chunks)
+        {
+            var p = road.Points;
+
+            Vector2 dir = new Vector2((float)(p[1].X - p[0].X), (float)(p[1].Y - p[0].Y));
+            Vector2 normal = new Vector2(-dir.y, dir.x).normalized;
+            (double X, double Y) n = (normal.x, normal.y);
+
+
+            List<(double X, double Y)> outline = new List<(double x, double y)>()
+            {
+                (p[0].X + (n.X*road.Width*0.5f), p[0].Y + (n.Y*road.Width*0.5f)),
+                (p[0].X - (n.X*road.Width*0.5f), p[0].Y - (n.Y*road.Width*0.5f)),
+                (p[1].X + (n.X*road.Width*0.5f), p[1].Y + (n.Y*road.Width*0.5f)),
+                (p[1].X - (n.X*road.Width*0.5f), p[1].Y - (n.Y*road.Width*0.5f))
+            };
+
+            var poly = CleanOutline(outline.Select(p => new D2(p.X, p.Y)).ToList());
+            if (poly.Count < 3)
+                return;
+
+            var grid = GetRoadGrid();
+
+            // Cut every triangle along the grid, collecting the pieces by cell, then mesh each cell once.
+            var cells = new Dictionary<(int x, int y), List<List<D2>>>();
+
+            foreach (var (a, b, c) in EarClip(poly))
+                ClipTriToCells(a, b, c, grid, cells);
+
+            foreach (var cell in cells)
+                MeshCell(cell.Key, cell.Value, grid, chunks);
+        }
+
         #region Streets
+
+        private void GenerateStreets(CityMap map)
+        {
+            var streetChunks = LOD.StreetChunks;
+
+            foreach (var street in map.Streets)
+                MeshStreet(street, streetChunks);
+        }
 
         // Vertex welding: for each street chunk, a map from a rounded 2D point to its vertex index, so
         // triangles that share a corner share one vertex instead of each adding their own copy.
