@@ -1,6 +1,5 @@
 using System.Collections.Generic;
 using System.Linq;
-using Unity.VisualScripting;
 using UnityEngine;
 
 namespace CityGen
@@ -9,17 +8,26 @@ namespace CityGen
 
     public class City3DGen : MonoBehaviour
     {
+        [Header("Settings")]
         [SerializeField] private Material buildingMaterial;
         [SerializeField] private Material streetMaterial;
+        private static int tileSize = 1;
 
-        public void Consume(CityMap map, Vector3? point = null)
+        // Set in Consume
+        private static Vector3 origin;
+
+        public void ApplySettings(int tileSize)
         {
-            Vector3 offset = point ?? Vector3.zero;
-            offset -= new Vector3(map.Width / 2, 0, map.Height / 2);
+            City3DGen.tileSize = tileSize;
+        }
+
+        public void Consume(CityMap map, Vector3? centre = null)
+        {
+            origin = (centre ?? Vector3.zero) - V3(map.Width/2, map.Height/2) * tileSize;
 
             // BUILDINGS
 
-            GenerateBuildings(map, offset);
+            GenerateBuildings(map, tileSize);
 
             // STREETS
 
@@ -28,9 +36,7 @@ namespace CityGen
 
             foreach (var street in map.Streets)
             {
-                var frame = map.Sectors[street.Sector].Frame;
-
-                MeshStreet(street, offset, streetVerts, streetTris);
+                MeshStreet(street, origin, streetVerts, streetTris);
             }
 
             var streetsMesh = new Mesh();
@@ -49,13 +55,13 @@ namespace CityGen
             streetsMeshFilter.sharedMesh = streetsMesh;
         }
 
-        private void GenerateBuildings(CityMap map, Vector3 offset)
+        private void GenerateBuildings(CityMap map, int tileSize)
         {
             foreach (var b in map.Buildings)
             {
                 var frame = map.Sectors[b.Sector].Frame;
 
-                var pos = V3(frame.ToWorld(b.Lot.CentreX, b.Lot.CentreY)) + offset;
+                var pos = World(frame.ToWorld(b.Lot.CentreX, b.Lot.CentreY));
 
                 var chunks = CityLODManager.Instance.BuildingChunks;
 
@@ -64,7 +70,7 @@ namespace CityGen
 
                 Chunk chunk = chunks.Get(gridX, gridZ);
 
-                MeshBuilding(b, frame, offset, chunk.Verts, chunk.Tris);
+                MeshBuilding(b, frame, chunk.Verts, chunk.Tris);
             }
 
             foreach (var c in CityLODManager.Instance.BuildingChunks.Chunks.Values)
@@ -83,34 +89,6 @@ namespace CityGen
                 meshRenderer.sharedMaterial = buildingMaterial;
                 meshFilter.sharedMesh = mesh;
             }
-
-
-            /*
-            var verts = new List<Vector3>(); // may be abstracted later
-            var tris = new List<int>();
-
-            foreach (var b in map.Buildings)
-            {
-                var frame = map.Sectors[b.Sector].Frame;
-
-                MeshBuilding(b, frame, offset, verts, tris);
-            }
-
-            var mesh = new Mesh();
-            mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
-
-            mesh.SetVertices(verts);
-            mesh.SetTriangles(tris, 0);
-            mesh.RecalculateNormals();
-            mesh.RecalculateBounds();
-
-            var obj = new GameObject("buildings");
-            var meshRenderer = obj.AddComponent<MeshRenderer>();
-            var meshFilter = obj.AddComponent<MeshFilter>();
-
-            meshRenderer.sharedMaterial = buildingMaterial;
-            meshFilter.sharedMesh = mesh;
-            */
         }
 
         private void MeshStreet(
@@ -146,12 +124,10 @@ namespace CityGen
                 }
             }
 
-            Fill(road.Outline.Select(point => V3(point) + offset).ToList());
+            Fill(road.Outline.Select(point => World(point)).ToList());
         }
 
-        private void MeshBuilding(
-            Building building, Frame frame, Vector3 offset, 
-            List<Vector3> verts, List<int> tris)
+        private void MeshBuilding(Building building, Frame frame, List<Vector3> verts, List<int> tris)
         {
             var firstTile = building.LocalTiles[0];
             int lowX = firstTile.X;
@@ -171,42 +147,42 @@ namespace CityGen
 
             // Roof
             MeshSquare(
-                    V3(frame.ToWorld(lowX, lowY), building.MaxFloors) + offset,
-                    V3(frame.ToWorld(lowX, highY), building.MaxFloors) + offset,
-                    V3(frame.ToWorld(highX, highY), building.MaxFloors) + offset,
-                    V3(frame.ToWorld(highX, lowY), building.MaxFloors) + offset,
+                    World(frame.ToWorld(lowX, lowY), building.MaxFloors),
+                    World(frame.ToWorld(lowX, highY), building.MaxFloors),
+                    World(frame.ToWorld(highX, highY), building.MaxFloors),
+                    World(frame.ToWorld(highX, lowY), building.MaxFloors),
                     Vector3.up, verts, tris);
 
             // Left wall
             MeshSquare(
-                    V3(frame.ToWorld(lowX, lowY)) + offset,
-                    V3(frame.ToWorld(lowX, lowY), building.MaxFloors) + offset,
-                    V3(frame.ToWorld(lowX, highY), building.MaxFloors) + offset,
-                    V3(frame.ToWorld(lowX, highY)) + offset,
+                    World(frame.ToWorld(lowX, lowY)),
+                    World(frame.ToWorld(lowX, lowY), building.MaxFloors),
+                    World(frame.ToWorld(lowX, highY), building.MaxFloors),
+                    World(frame.ToWorld(lowX, highY)),
                     Vector3.left, verts, tris);
 
             // Right Wall
             MeshSquare(
-                    V3(frame.ToWorld(highX, lowY)) + offset,
-                    V3(frame.ToWorld(highX, lowY), building.MaxFloors) + offset,
-                    V3(frame.ToWorld(highX, highY), building.MaxFloors) + offset,
-                    V3(frame.ToWorld(highX, highY)) + offset,
+                    World(frame.ToWorld(highX, lowY)),
+                    World(frame.ToWorld(highX, lowY), building.MaxFloors),
+                    World(frame.ToWorld(highX, highY), building.MaxFloors),
+                    World(frame.ToWorld(highX, highY)),
                     Vector3.right, verts, tris);
 
             // Back Wall
             MeshSquare(
-                    V3(frame.ToWorld(lowX, lowY)) + offset,
-                    V3(frame.ToWorld(lowX, lowY), building.MaxFloors) + offset,
-                    V3(frame.ToWorld(highX, lowY), building.MaxFloors) + offset,
-                    V3(frame.ToWorld(highX, lowY)) + offset,
+                    World(frame.ToWorld(lowX, lowY)),
+                    World(frame.ToWorld(lowX, lowY), building.MaxFloors),
+                    World(frame.ToWorld(highX, lowY), building.MaxFloors),
+                    World(frame.ToWorld(highX, lowY)),
                     Vector3.back, verts, tris);
 
             // Forward Wall
             MeshSquare(
-                    V3(frame.ToWorld(lowX, highY)) + offset,
-                    V3(frame.ToWorld(lowX, highY), building.MaxFloors) + offset,
-                    V3(frame.ToWorld(highX, highY), building.MaxFloors) + offset,
-                    V3(frame.ToWorld(highX, highY)) + offset,
+                    World(frame.ToWorld(lowX, highY)),
+                    World(frame.ToWorld(lowX, highY), building.MaxFloors),
+                    World(frame.ToWorld(highX, highY), building.MaxFloors),
+                    World(frame.ToWorld(highX, highY)),
                     Vector3.forward, verts, tris);
         }
 
@@ -256,11 +232,20 @@ namespace CityGen
             tris.Add(i + 2);
         }
 
-
+        // Converts x, y, h into Vector3 format. h = height.
+        // Does not do any other conversions such as tile size
         private static Vector3 V3(double x, double y, float h = 0) => V3((x, y), h);
         private static Vector3 V3((double x, double y) point, float h = 0)
         {
             return new Vector3((float)point.x, h, (float)point.y);
         }
+
+        // Maps x, y, h into its world position. h = height.
+        // Accounts for city origin and tile size.
+        private static Vector3 World((double x, double y) point, int h = 0)
+        {
+            return origin + V3(point.x, point.y, h)*tileSize;
+        }
+        private static Vector3 World(double x, double y, int h = 0) => World((x, y), h);
     }
 }
