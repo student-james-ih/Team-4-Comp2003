@@ -1,9 +1,12 @@
+using CityGen;
 using UnityEngine;
+using System;
 
 [RequireComponent (typeof(Terrain))]
 public class terrainGen : MonoBehaviour
 {
-    
+    [SerializeField] CityBuilder cities;
+
     [Header("Size settings")]
     [Tooltip("Must be a valid output of the equation of (2^n + 1), where N is an int (e.g. 129, 257, 513, 1025)")]
     public int resolution = 1025;
@@ -48,7 +51,16 @@ public class terrainGen : MonoBehaviour
 
     void Start()
     {
-        generateMap();
+        var terrain = generateMap();
+
+        try
+        {
+            _ = cities.Build(terrain);
+        }
+        catch (Exception e)
+        {
+            Debug.LogError(e.Message);
+        }
     }
 
     private void OnValidate()
@@ -57,7 +69,7 @@ public class terrainGen : MonoBehaviour
         octaves = Mathf.Max(1, octaves); // minimum one octave
     }
     
-    public void generateMap() // creates the height map and applies it to the terrain data 
+    public Terrain generateMap() // creates the height map and applies it to the terrain data 
     {
         Terrain terrain = GetComponent<Terrain>();
         TerrainData tData = terrain.terrainData;
@@ -67,6 +79,8 @@ public class terrainGen : MonoBehaviour
         tData.heightmapResolution = resolution;
         tData.size = new Vector3(width, heightCap, width);
         tData.SetHeights(0, 0, height);
+
+        return terrain;
     }
 
     float[,] generateHeightMap(int size) // retruns a size x size grid of the heights (0,1) using octaves
