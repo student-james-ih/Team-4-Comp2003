@@ -15,6 +15,8 @@ namespace CityGen
 
         [SerializeField] private int tileSize = 1;
 
+        [SerializeField] private Transform cityPosition;
+
         void Awake()
         {
             gen.ApplySettings(tileSize);
@@ -28,8 +30,16 @@ namespace CityGen
             Vector3 terrOrigin = terrain.transform.position;
             Vector3 terrSize = data.size;
 
-            Vector3 cityCentre = new Vector3(250, 0, 250);
-            cityCentre.y = terrain.SampleHeight(cityCentre) + terrOrigin.y;
+            Vector3 cityCentre = (cityPosition != null) ? 
+                new Vector3(
+                    cityPosition.position.x,
+                    0,
+                    cityPosition.position.z) :
+                new Vector3(
+                    terrOrigin.x + terrSize.x * 0.5f,
+                    0,
+                    terrOrigin.z + terrSize.z * 0.5f);
+
             Vector3 cityOrigin = cityCentre - new Vector3(
                 settings.Width * tileSize * 0.5f,
                 0,
@@ -54,7 +64,7 @@ namespace CityGen
                     worldZ > terrBoundMax.z)
                     return true;
 
-                if (GetTerrainHeight(heights, terrSize.x, terrSize.y, terrBoundMin, worldX, worldZ) > 30)
+                if (GetTerrainHeightThreadSafe(heights, terrSize.x, terrSize.y, terrBoundMin, worldX, worldZ) > 30)
                     return true;
 
                 return false;
@@ -64,10 +74,18 @@ namespace CityGen
             CityMap blueprint = await Task.Run(() => 
                 BlueprintGenerator.Generate(settings));
 
-            gen.Consume(blueprint, cityCentre);
+            gen.Consume(blueprint, terrain, heights, cityCentre);
         }
 
-        private static float GetTerrainHeight(
+        public static float GetTerrainHeight(Terrain terrain, float[,] heights, float worldX, float worldZ)
+        {
+            var data = terrain.terrainData;
+            var pos = terrain.GetPosition();
+            return GetTerrainHeightThreadSafe(
+                heights, data.size.x, data.size.y, (pos.x, pos.z), worldX, worldZ);
+        }
+
+        public static float GetTerrainHeightThreadSafe(
             float[,] heights, float terrainSize, float terrainHeight,
             (float x, float y) terrainOrigin, 
             float worldX, float worldZ)
