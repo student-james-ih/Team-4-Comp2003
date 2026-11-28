@@ -54,6 +54,8 @@ public class terrainGen : MonoBehaviour
     {
         var terrain = generateMap();
 
+        painter.Paint();
+
         /*
         try
         {
@@ -64,8 +66,6 @@ public class terrainGen : MonoBehaviour
             Debug.LogError(e.Message);
         }
         */
-
-        painter.Paint();
     }
 
     private void OnValidate()
@@ -134,7 +134,7 @@ public class terrainGen : MonoBehaviour
         return map;
     }
 
-    float mountainMask(float mx, float my)
+    public float mountainMask(float mx, float my)
     {
         float n = Mathf.PerlinNoise(mx + seed + 5000f, my + seed + 5000f);
         float threshold = Mathf.Lerp(1f + mountainSharpness, -mountainSharpness, mountainAmount);
